@@ -1,21 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
 <search>
   <entry>
-    <title>Hello World</title>
-    <url>/2020/06/23/hello-world/</url>
-    <content><![CDATA[<p>Welcome to <a href="https://hexo.io/" target="_blank" rel="noopener">Hexo</a>! This is your very first post. Check <a href="https://hexo.io/docs/" target="_blank" rel="noopener">documentation</a> for more info. If you get any problems when using Hexo, you can find the answer in <a href="https://hexo.io/docs/troubleshooting.html" target="_blank" rel="noopener">troubleshooting</a> or you can ask me on <a href="https://github.com/hexojs/hexo/issues" target="_blank" rel="noopener">GitHub</a>.</p>
-<h2 id="Quick-Start"><a href="#Quick-Start" class="headerlink" title="Quick Start"></a>Quick Start</h2><h3 id="Create-a-new-post"><a href="#Create-a-new-post" class="headerlink" title="Create a new post"></a>Create a new post</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo new <span class="string">"My New Post"</span></span><br></pre></td></tr></table></figure>
+    <title>Pwntools dynelf模块在python3下报错分析和解决办法</title>
+    <url>/2020/07/01/Dynelf-in-python3/</url>
+    <content><![CDATA[<h2 id="发现问题"><a href="#发现问题" class="headerlink" title="发现问题"></a>发现问题</h2><p>昨天在学习pwn姿势的时候，需要用到dynelf这一个模块。我依葫芦画瓢的过程中，发现报错，运行不了。经过自己一系列菜鸡般的调试，才发现问题所在。</p>
+<figure class="highlight plain"><table><tr><td class="code"><pre><span class="line">Traceback (most recent call last):</span><br><span class="line">  File &quot;level4.py&quot;, line 29, in &lt;module&gt;</span><br><span class="line">    d&#x3D;DynELF(leak, elf &#x3D; elf)</span><br><span class="line">  File &quot;&#x2F;home&#x2F;peter&#x2F;.local&#x2F;lib&#x2F;python3.6&#x2F;site-packages&#x2F;pwnlib&#x2F;dynelf.py&quot;, line 182, in __init__</span><br><span class="line">    self.libbase &#x3D; self._find_base(pointer or elf.address)</span><br><span class="line">  File &quot;&#x2F;home&#x2F;peter&#x2F;.local&#x2F;lib&#x2F;python3.6&#x2F;site-packages&#x2F;pwnlib&#x2F;dynelf.py&quot;, line 295, in _find_base</span><br><span class="line">    if self.leak.compare(ptr, &#39;\x7fELF&#39;):</span><br><span class="line">  File &quot;&#x2F;home&#x2F;peter&#x2F;.local&#x2F;lib&#x2F;python3.6&#x2F;site-packages&#x2F;pwnlib&#x2F;memleak.py&quot;, line 546, in compare</span><br><span class="line">    for i, byte in enumerate(bytearray(bts)):</span><br><span class="line">TypeError: string argument without an encoding</span><br></pre></td></tr></table></figure>
+<p>这大概又是因为python2和python3在字符串处理上变化的锅，本人因为这个掉坑里好几次了。在Python3中的 str 对象在Python2中叫做 unicode，python2中 str 并不是完全意义上的字符串，把它称作字节码串更合适，所以python2中的 str 相当于python3中的 bytes 。在python3下使用pwntools的dynelf时，则需要对 pwnlib 中的 dynelf.py 进行修改。修改的地方一共两处。</p>
+<h2 id="错误分析与解决办法"><a href="#错误分析与解决办法" class="headerlink" title="错误分析与解决办法"></a>错误分析与解决办法</h2><ol>
+<li>跟着报错的信息可知，需要的是一个bytes类型的参数，跟着找回去，在 dynelf.py 的第295行发现参数是str类型的</li>
+</ol>
+<p><img src= "/img/loading.gif" data-src="https://tvax2.sinaimg.cn/large/bf2deb23gy1ggbmy4jum5j20mt08bgm6.jpg" alt="微信截图_20200701181249"></p>
+<p>在第295行compare函数里第二个参数前面加一个b，即改成 <code>if self.leak.compare(ptr, b&#39;\x7fELF&#39;):</code> 声明这是一个字节串类型，不然python3就把这个当成str处理。</p>
+<ol start="2">
+<li>改完上面的那个地方之后，再运行，发现还有错</li>
+</ol>
+<figure class="highlight plain"><table><tr><td class="code"><pre><span class="line">Traceback (most recent call last):</span><br><span class="line">  File &quot;level4.py&quot;, line 31, in &lt;module&gt;</span><br><span class="line">    system_addr &#x3D; d.lookup(b&#39;system&#39;, b&#39;libc&#39;)</span><br><span class="line">  File &quot;&#x2F;home&#x2F;peter&#x2F;.local&#x2F;lib&#x2F;python3.6&#x2F;site-packages&#x2F;pwnlib&#x2F;dynelf.py&quot;, line 581, in lookup</span><br><span class="line">    result &#x3D; dynlib._lookup(symb)</span><br><span class="line">  File &quot;&#x2F;home&#x2F;peter&#x2F;.local&#x2F;lib&#x2F;python3.6&#x2F;site-packages&#x2F;pwnlib&#x2F;dynelf.py&quot;, line 698, in _lookup</span><br><span class="line">    return routine(self.libbase, symb, hshtab, strtab, symtab)</span><br><span class="line">  File &quot;&#x2F;home&#x2F;peter&#x2F;.local&#x2F;lib&#x2F;python3.6&#x2F;site-packages&#x2F;pwnlib&#x2F;dynelf.py&quot;, line 797, in _resolve_symbol_gnu</span><br><span class="line">    hsh    &#x3D; gnu_hash(symb)</span><br><span class="line">  File &quot;&#x2F;home&#x2F;peter&#x2F;.local&#x2F;lib&#x2F;python3.6&#x2F;site-packages&#x2F;pwnlib&#x2F;dynelf.py&quot;, line 92, in gnu_hash</span><br><span class="line">    h &#x3D; h * 33 + ord(c)</span><br><span class="line">TypeError: ord() expected string of length 1, but int found</span><br></pre></td></tr></table></figure>
 
-<p>More info: <a href="https://hexo.io/docs/writing.html" target="_blank" rel="noopener">Writing</a></p>
-<h3 id="Run-server"><a href="#Run-server" class="headerlink" title="Run server"></a>Run server</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo server</span><br></pre></td></tr></table></figure>
-
-<p>More info: <a href="https://hexo.io/docs/server.html" target="_blank" rel="noopener">Server</a></p>
-<h3 id="Generate-static-files"><a href="#Generate-static-files" class="headerlink" title="Generate static files"></a>Generate static files</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo generate</span><br></pre></td></tr></table></figure>
-
-<p>More info: <a href="https://hexo.io/docs/generating.html" target="_blank" rel="noopener">Generating</a></p>
-<h3 id="Deploy-to-remote-sites"><a href="#Deploy-to-remote-sites" class="headerlink" title="Deploy to remote sites"></a>Deploy to remote sites</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">$ hexo deploy</span><br></pre></td></tr></table></figure>
-
-<p>More info: <a href="https://hexo.io/docs/one-command-deployment.html" target="_blank" rel="noopener">Deployment</a></p>
+<p>跟到第92行看相应的代码，</p>
+<p><img src= "/img/loading.gif" data-src="https://tvax2.sinaimg.cn/large/bf2deb23gy1ggbn7a4z1mj20pv08agm2.jpg" alt="2"></p>
+<p>出错的是在一个<code>gnu_hash(s)</code>的函数里，由注释可以看到，传入的参数类型是python2的 str 类型，在python3里其实就是bytes类型，因此在后面的for循环里，c实际上是 int 类型，<code>ord()</code>接受的参数应该是单个字符，其实在这个循环里，c的值已经就是对应字符的ascii码值了，不需要再计算了，所以这里改成 <code>h = h * 33 + c</code> 就可以了。</p>
+<ol start="3">
+<li>这两个地方都改完之后，在调用dynelf时，要注意参数的类型，不然还是会报错。比如，在调用<code>lookup</code>方法的时候，就要注意参数应该是bytes类型，比如 <code>system_addr = dynelf.lookup(b&#39;system&#39;, b&#39;libc&#39;)</code></li>
+</ol>
 ]]></content>
+      <categories>
+        <category>CTF</category>
+      </categories>
+      <tags>
+        <tag>CTF</tag>
+        <tag>pwn</tag>
+      </tags>
   </entry>
 </search>
